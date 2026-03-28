@@ -1,4 +1,5 @@
 const BASE = 'https://mtg-tracker-backend.azurewebsites.net'
+//const BASE = 'http://localhost:8000'
 
 export async function fetchJSON(path, options = {}) {
   const res = await fetch(BASE + path, {
@@ -19,6 +20,7 @@ export const getGames   = () => fetchJSON('/games')
 export const getLeaderboard  = () => fetchJSON('/stats/leaderboard')
 export const getHeadToHead   = () => fetchJSON('/stats/head-to-head')
 export const getDeckHistory  = () => fetchJSON('/stats/deck-history')
+export const getDeckStats    = (id) => fetchJSON(`/stats/deck/${id}`)
 
 async function adminFetch(path, adminKey, options = {}) {
   const res = await fetch(BASE + path, {
@@ -45,3 +47,4 @@ export const getAdminLogs   = (key)         => adminFetch('/admin/logs',        
 export const getAdminKeys   = (key)         => adminFetch('/admin/keys',          key)
 export const createAdminKey = (name, key)   => adminFetch('/admin/keys',          key, { method: 'POST', body: JSON.stringify({ name }) })
 export const deleteAdminKey = (token, key)  => adminFetch(`/admin/keys/${token}`, key, { method: 'DELETE' })
+

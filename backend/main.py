@@ -66,7 +66,11 @@ app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://nice-dune-06a4aa00f-preview.eastus2.1.azurestaticapps.net"],
+    allow_origins=[
+        "https://nice-dune-06a4aa00f.1.azurestaticapps.net",
+        "https://nice-dune-06a4aa00f-preview.eastus2.1.azurestaticapps.net",
+        "http://localhost:5173",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -358,6 +362,101 @@ def get_deck_history(db: Session = Depends(get_db)):
             "history": history,
         })
     return sorted(output, key=lambda d: d["deck_label"])
+
+
+@app.get("/stats/deck/{deck_id}")
+def get_deck_stats(deck_id: int, db: Session = Depends(get_db)):
+    deck = db.query(models.Deck).filter(models.Deck.id == deck_id).first()
+    if not deck:
+        raise HTTPException(status_code=404, detail="Deck not found")
+
+    results = (
+        db.query(models.GameResult, models.Game)
+        .join(models.Game, models.GameResult.game_id == models.Game.id)
+        .filter(models.GameResult.deck_id == deck_id)
+        .order_by(models.Game.date, models.Game.id)
+        .all()
+    )
+
+    wins = 0
+    losses = 0
+    draws = 0
+    non_draw_total = 0
+    history = []
+    game_ids_won = []
+    game_ids_lost = []
+
+    for result, game in results:
+        if game.draw:
+            draws += 1
+        elif result.won:
+            wins += 1
+            game_ids_won.append(game.id)
+        else:
+            losses += 1
+            game_ids_lost.append(game.id)
+
+        if not game.draw:
+            non_draw_total += 1
+            history.append({
+                "game_number": non_draw_total,
+                "cumulative_win_rate": round(wins / non_draw_total * 100, 1),
+            })
+
+    win_rate = round(wins / (wins + losses) * 100, 1) if (wins + losses) > 0 else 0
+
+    won_against: dict = defaultdict(int)
+    if game_ids_won:
+        for opp_result, opp_deck, opp_player in (
+            db.query(models.GameResult, models.Deck, models.Player)
+            .join(models.Deck, models.GameResult.deck_id == models.Deck.id)
+            .join(models.Player, models.Deck.player_id == models.Player.id)
+            .filter(
+                models.GameResult.game_id.in_(game_ids_won),
+                models.GameResult.deck_id != deck_id,
+            )
+            .all()
+        ):
+            won_against[(opp_deck.id, opp_deck.name, opp_player.name)] += 1
+
+    lost_against: dict = defaultdict(int)
+    if game_ids_lost:
+        for win_result, win_deck, win_player in (
+            db.query(models.GameResult, models.Deck, models.Player)
+            .join(models.Deck, models.GameResult.deck_id == models.Deck.id)
+            .join(models.Player, models.Deck.player_id == models.Player.id)
+            .filter(
+                models.GameResult.game_id.in_(game_ids_lost),
+                models.GameResult.deck_id != deck_id,
+                models.GameResult.won == True,
+            )
+            .all()
+        ):
+            lost_against[(win_deck.id, win_deck.name, win_player.name)] += 1
+
+    most_won_against = sorted(
+        [{"deck_id": k[0], "deck_name": k[1], "player": k[2], "count": v} for k, v in won_against.items()],
+        key=lambda x: x["count"], reverse=True,
+    )[:5]
+
+    most_lost_against = sorted(
+        [{"deck_id": k[0], "deck_name": k[1], "player": k[2], "count": v} for k, v in lost_against.items()],
+        key=lambda x: x["count"], reverse=True,
+    )[:5]
+
+    return {
+        "deck_id": deck.id,
+        "deck_name": deck.name,
+        "player": deck.player.name,
+        "wins": wins,
+        "losses": losses,
+        "draws": draws,
+        "games": wins + losses + draws,
+        "win_rate": win_rate,
+        "history": history,
+        "most_won_against": most_won_against,
+        "most_lost_against": most_lost_against,
+    }
 
 
 # ---------- Admin ----------

@@ -51,12 +51,15 @@ export default function Leaderboard() {
     best_deck_rate: row.best_deck?.win_rate ?? 0,
   }))
 
+  const qualifiedNames = new Set(flat.filter(r => r.games >= 10).map(r => r.player))
+  const qualified = flat.filter(r => qualifiedNames.has(r.player))
+
   function toggleSort(key) {
     if (sortKey === key) setSortDesc(d => !d)
     else { setSortKey(key); setSortDesc(true) }
   }
 
-  const sorted = [...flat].sort((a, b) => {
+  const sorted = [...qualified].sort((a, b) => {
     const av = a[sortKey], bv = b[sortKey]
     if (typeof av === 'string') return sortDesc ? bv.localeCompare(av) : av.localeCompare(bv)
     return sortDesc ? (bv ?? 0) - (av ?? 0) : (av ?? 0) - (bv ?? 0)
@@ -152,37 +155,40 @@ export default function Leaderboard() {
       </div>
 
       {/* Head-to-head */}
-      {h2h && h2h.players.length > 0 && (
-        <section style={{ marginTop: '2.5rem' }}>
-          <h3>Head-to-Head <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 'normal' }}>— wins when both players shared a game</span></h3>
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ fontSize: '0.85rem' }}>
-              <thead>
-                <tr>
-                  <th style={{ textAlign: 'left', color: '#94a3b8' }}>↓ beat →</th>
-                  {h2h.players.map(p => <th key={p} style={{ color: '#94a3b8' }}>{p}</th>)}
-                </tr>
-              </thead>
-              <tbody>
-                {h2h.players.map(rowP => (
-                  <tr key={rowP}>
-                    <td style={{ fontWeight: 'bold', paddingRight: '0.75rem' }}>{rowP}</td>
-                    {h2h.players.map(colP => (
-                      <td key={colP} style={{
-                        textAlign: 'center',
-                        color: rowP === colP ? '#1e293b' : (h2h.matrix[rowP]?.[colP] ?? 0) > 0 ? '#e0e0e0' : '#475569',
-                        background: rowP === colP ? '#0f172a' : undefined,
-                      }}>
-                        {rowP === colP ? '—' : (h2h.matrix[rowP]?.[colP] ?? 0)}
-                      </td>
-                    ))}
+      {h2h && h2h.players.length > 0 && (() => {
+        const h2hPlayers = h2h.players.filter(p => qualifiedNames.has(p))
+        return h2hPlayers.length > 0 && (
+          <section style={{ marginTop: '2.5rem' }}>
+            <h3>Head-to-Head <span style={{ color: '#94a3b8', fontSize: '0.85rem', fontWeight: 'normal' }}>— wins when both players shared a game</span></h3>
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ fontSize: '0.85rem' }}>
+                <thead>
+                  <tr>
+                    <th style={{ textAlign: 'left', color: '#94a3b8' }}>↓ beat →</th>
+                    {h2hPlayers.map(p => <th key={p} style={{ color: '#94a3b8' }}>{p}</th>)}
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
-      )}
+                </thead>
+                <tbody>
+                  {h2hPlayers.map(rowP => (
+                    <tr key={rowP}>
+                      <td style={{ fontWeight: 'bold', paddingRight: '0.75rem' }}>{rowP}</td>
+                      {h2hPlayers.map(colP => (
+                        <td key={colP} style={{
+                          textAlign: 'center',
+                          color: rowP === colP ? '#1e293b' : (h2h.matrix[rowP]?.[colP] ?? 0) > 0 ? '#e0e0e0' : '#475569',
+                          background: rowP === colP ? '#0f172a' : undefined,
+                        }}>
+                          {rowP === colP ? '—' : (h2h.matrix[rowP]?.[colP] ?? 0)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+        )
+      })()}
 
       {/* Deck win rate over time */}
       <section style={{ marginTop: '2.5rem' }}>
@@ -199,7 +205,7 @@ export default function Leaderboard() {
             <div style={{ overflowY: 'auto', flex: 1 }}>
               {[...deckHistory]
                 .sort((a, b) => b.history.length - a.history.length)
-                .filter(d => d.deck_label.toLowerCase().includes(deckSearch.toLowerCase()))
+                .filter(d => qualifiedNames.has(d.player) && d.deck_label.toLowerCase().includes(deckSearch.toLowerCase()))
                 .map(deck => {
                   const colorIndex = deckHistory.findIndex(d => d.deck_id === deck.deck_id)
                   const selected = selectedDecks.includes(deck.deck_id)
